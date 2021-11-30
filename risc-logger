@@ -1,0 +1,80 @@
+#!/usr/bin/env perl
+#
+##
+use strict;
+use Data::Dumper
+
+$Data::Dumper::Sortkeys	= 1;
+$Data::Dumper::Terse	= 1;
+
+use Pod::Usage;
+use Getopt::Long qw(
+	:config
+	require_order
+	bundling
+	no_ignore_case
+);
+
+use RISC::Collect::Constants qw( :status );
+use RISC::Collect::Logger;
+
+my $level = 'info';
+my $ident = 'cli-logger';
+
+GetOptions(
+	'l|level=s'	=> \$level,
+	'i|ident=s'	=> \$ident,
+	'h|help'	=> sub { pod2usage(EXIT_SUCCESS) }
+);
+
+my $logger = RISC::Collect::Logger->new($ident);
+
+my $message;
+if (@ARGV) {
+	chomp($message = join(' ', @ARGV));
+} else {
+	chomp($message = <>);
+}
+
+$logger->$level($message);
+
+exit(EXIT_SUCCESS);
+
+__END__
+
+=head1 NAME
+
+C<risc-logger> -- log messages from the shell
+
+=head1 SYNOPSIS
+
+	risc-logger [--level LEVEL] [--ident IDENT] MESSAGE
+	echo MESSAGE | risc-logger [--level LEVEL] [--ident IDENT]
+
+	risc-logger --help
+	perldoc risc-logger
+
+=head1 DESCRIPTION
+
+C<risc-logger> is a wrapper around the C<RISC::Collect::Logger> logger that
+allows non-Perl processes to generate log messages.
+
+=head1 OPTIONS
+
+=head3 -l, --level LEVEL
+
+Sets the logging level of the message, using one of the logger's method names.
+There are C<debug>, C<info>, C<warn>, C<error>, C<fatal>. The default level is
+C<info> when a level is not supplied.
+
+=head3 -i, --ident IDENT
+
+The identification string used in the logged message. If not supplied, the
+default value 'cli-logger' is used.
+
+=head3 -h, --help
+
+Display the short help. More detailed documentation is available via C<perldoc>.
+
+
+=cut

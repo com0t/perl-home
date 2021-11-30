@@ -1,0 +1,173 @@
+#!/usr/bin/env perl
+#
+##
+use strict;
+use Data::Dumper
+
+$Data::Dumper::Sortkeys	= 1;
+$Data::Dumper::Terse	= 1;
+
+use Pod::Usage;
+use Getopt::Long qw(
+	:config
+	require_order
+	bundling
+	no_ignore_case
+);
+
+use JSON;
+
+use RISC::Collect::Constants qw( :status );
+use RISC::Collect::CollectiondClient;
+
+my (%opts, $op);
+
+my %operations = (
+	get	=> 1,
+	post	=> 1,
+	put	=> 1,
+	delete	=> 1
+);
+
+my $client = RISC::Collect::CollectiondClient->new();
+my $json = JSON->new->utf8();
+
+GetOptions(\%opts,
+	'get'		=> sub { $op = 'get' },
+	'post'		=> sub { $op = 'post' },
+	'put'		=> sub { $op = 'put' },
+	'delete'	=> sub { $op = 'delete' },
+	'uri=s',
+	'host=s',
+	'data=s',
+	'pretty|p'	=> sub {
+		$json = $json->canonical->indent->space_after();
+	},
+	'help|h'	=> sub { pod2usage(EXIT_SUCCESS) }
+);
+
+unless (($op) and ($operations{$op})) {
+	pod2usage({
+		-msg		=> 'bad or missing operation',
+		-exitval	=> EXIT_FAILURE
+	});
+}
+
+unless ($opts{'uri'}) {
+	pod2usage({
+		-msg		=> 'must supply a URI with --uri',
+		-exitval	=> EXIT_FAILURE
+	});
+}
+
+my $request_data;
+if ($op =~ /post|put/) {
+	unless ($opts{'data'}) {
+		pod2usage({
+			-msg		=> '--post or --put requires --data',
+			-exitval	=> EXIT_FAILURE
+		});
+	}
+	eval {
+		$request_data = $json->decode($opts{'data'});
+	}; if ($@) {
+		printf(STDERR "failed to decode request data: %s\n", $@);
+		exit(EXIT_FAILURE);
+	}
+}
+
+$client->uri($opts{'uri'});
+$client->host($opts{'host'}) if ($opts{'host'});
+
+my $resp = $client->$op($request_data);
+
+unless ($resp) {
+	printf(STDERR "request failed: %s\n", $client->err());
+	exit(EXIT_FAILURE);
+}
+
+printf("%s\n", $json->encode($resp->response()));
+
+exit(0);
+
+__END__
+
+=head1 NAME
+
+C<collectiond-client>
+
+=head1 SYNOPSIS
+
+	collectiond-client --uri URI [REQUEST] [--data JSON] [--host HOST] [--pretty]
+
+	collectiond-client --help
+	perldoc collectiond-client
+
+=head1 DESCRIPTION
+
+C<collectiond-client> provides a simple frontend for the
+C<RISC::Collect::CollectiondClient> to call methods on the C<collectiond>
+RESTful service and print the response data as JSON.
+
+The URI must be specified using the C<--uri> flag, which includes a leading
+slash. For example to call the GET method on the C<ping> endpoint:
+
+	collectiond-client --uri /ping --get
+
+Exactly one request flag must be specified, which correspond to the HTTP
+request methods as lower case. These are C<--get>, C<--post>, C<--put>, and
+C<--delete>.
+
+=head1 OPTIONS
+
+=head3 --uri URI
+
+Specifies the complete path element of the URI to query, including the leading
+slash.
+
+=head3 --get
+
+Issues a GET request to the URI.
+
+=head3 --post
+
+Issues a POST request to the URI. Requires the C<--data> flag.
+
+=head3 --put
+
+Issues a PUT request to the URI. Requires the C<--data> flag.
+
+=head3 --delete
+
+Issues a DELETE request to the URI.
+
+=head3 --data JSON
+
+Specifies data payload of a POST or PUT request, as a JSON string.
+
+=head3 --host HOST
+
+Overrides the default host portion of the URI, including the protocol.  For
+instance, to issue the request to port 5000 on localhost using HTTP:
+
+	collectiond-client --host http://localhost:5000 --uri /ping --get
+
+=head3 --pretty, -p
+
+Prettify the JSON output.
+
+=head3 --help, -h
+
+Print this help. More detailed documentation can be found using C<perldoc>.
+
+=head1 SEE ALSO
+
+=over
+
+=item C<RISC::Collect::CollectiondClient>
+
+=item C<collectiond>
+
+=back
+
+=cut

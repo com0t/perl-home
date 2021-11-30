@@ -1,0 +1,205 @@
+#!/usr/bin/env perl
+#
+##
+use strict;
+use Data::Dumper
+
+$Data::Dumper::Sortkeys	= 1;
+$Data::Dumper::Terse	= 1;
+
+use Pod::Usage;
+use Getopt::Long qw(
+	:config
+	require_order
+	bundling
+	no_ignore_case
+);
+
+use JSON;
+
+use RISC::Collect::Constants qw( :status );
+use RISC::Collect::Logger;
+use RISC::Collect::PerfScheduler;
+
+my (
+	$quiet
+);
+
+my $logger = RISC::Collect::Logger->new('perf-scheduler');
+
+my $json = JSON->new->utf8->canonical();
+
+my %flags;
+GetOptions(\%flags,
+	'class=s',
+	'get',
+	'start',
+	'schedule',
+	'stop',
+	'restart',
+	'pause',
+	'resume',
+	'check',
+	'kill',
+	'p|pretty'	=> sub {
+		$json = $json->space_after->indent();
+	},
+	'q|quiet'	=> sub {
+		$logger->level($RISC::Collect::Logger::LOG_LEVEL{'ERROR'});
+		$quiet = 1;
+	},
+	'v|verbose'	=> sub {
+		$logger->level($RISC::Collect::Logger::LOG_LEVEL{'DEBUG'})
+	},
+	'h|help'	=> sub { pod2usage(EXIT_SUCCESS) }
+);
+
+$flags{'schedule'} = delete $flags{'start'} if ($flags{'start'});
+
+my @given_operations = grep { defined($flags{$_}) } qw(
+	get schedule stop restart pause resume check
+);
+if (scalar @given_operations != 1) {
+	printf(STDERR "** must give exactly one of --schedule, --stop, --restart, --pause, --resume, --check\n");
+	exit(EXIT_FAILURE);
+}
+
+my $operation = shift @given_operations;
+
+unless ($flags{'class'}) {
+	printf(STDERR "** must give a perf class using --class\n");
+	exit(EXIT_FAILURE);
+}
+
+my $sched = RISC::Collect::PerfScheduler->new();
+
+my $options = ($flags{'kill'}) ? { kill => 1 } : undef;
+
+unless ($operation eq 'get') {
+	my $resp = $sched->$operation($flags{'class'}, $options);
+
+	if ($operation eq 'check') {
+		if ($resp) {
+			printf("%s\n", $json->encode({ status => 'running' }));
+			exit(EXIT_SUCCESS);
+		} else {
+			printf("%s\n", $json->encode({ status => 'not running' }));
+			exit(EXIT_SUCCESS);
+		}
+	}
+
+	unless ($resp) {
+		printf("%s\n", $json->encode({
+			status	=> 'failed',
+			error	=> $sched->err()
+		})) unless ($quiet);
+		exit(EXIT_FAILURE);
+	}
+}
+
+my $entry = $sched->get($flags{'class'});
+
+$entry = { status => sprintf('class %s not scheduled', $entry) } unless ($entry);
+
+printf("%s\n", $json->encode($entry)) unless ($quiet);
+
+exit(EXIT_SUCCESS);
+
+__END__
+
+=head1 NAME
+
+C<perf-scheduler>
+
+=head1 SYNOPSIS
+
+	perf-scheduler --class CLASS {--get|--schedule|--stop|--restart|--pause|--resume|--check} [--kill] [-qvp]
+
+	perf-scheduler --help
+	perldoc perf-scheduler
+
+=head1 DESCRIPTION
+
+C<perf-scheduler> is a command line utility that provides access to the
+C<RISC::Collect::PerfScheduler> scheduling operations on performance classes.
+
+A performance class must be specified using C<--class>, along with exactly one
+of the operations C<--schedule>, C<--stop>, C<--restart>, C<--pause>,
+C<--resume>, C<--check>, or C<--get>.
+
+A reasonable effort to determine the correct output to produce to describe the
+results of the operation is made, encoded as JSON on standard output. In most
+cases, the current state of the C<cmdcontrol> records for the performance class
+entries is used as the output.
+
+=head1 OPTIONS
+
+=over
+
+=item --class CLASS
+
+The name of a performance class.
+
+=item --schedule
+
+Add the performance class to the schedule.
+
+=item --start
+
+A synonym for C<--schedule>.
+
+=item --stop
+
+Remove the performance class from the schedule. If the C<--kill> flag is also
+given, any running processes related to the performance class are destroyed.
+
+=item --restart
+
+Perform a C<stop> followed by a C<schedule>.
+
+=item --pause
+
+Set the C<pause> bit for the performance class.
+
+=item --resume
+
+Unset the C<pause> bit for the performance class.
+
+=item --check
+
+Determine if the performance class is currently executing.
+
+=item --get
+
+Print the current C<cmdcontrol> records for the performance class as JSON to
+standard output.
+
+=item --kill
+
+Instruct the C<pause> or C<stop> operations to destroy processes related to the
+performance class.
+
+=item -q, --quiet
+
+Set the logger level to C<ERROR> and suppress other output.
+
+=item -v, --verbose
+
+Set the logger level to C<VERBOSE>.
+
+=item -h, --help
+
+Print this help and exit. The C<perldoc> utility can also be used to print more
+detailed documentation.
+
+=back
+
+=head1 SEE ALSO
+
+=over
+
+=item C<RISC::Collect::PerfScheduler>
+
+=back
+
+=cut

@@ -1,0 +1,207 @@
+#!/usr/bin/env perl
+#
+##
+use strict;
+use Data::Dumper
+
+$Data::Dumper::Sortkeys	= 1;
+$Data::Dumper::Terse	= 1;
+
+use Pod::Usage;
+use Getopt::Long qw(
+	:config
+	require_order
+	bundling
+	no_ignore_case
+);
+
+use JSON;
+
+use RISC::Collect::Constants qw( :status );
+use RISC::Collect::Logger;
+use RISC::Collect::Quirks;
+
+my $logger	= RISC::Collect::Logger->new('quirk');
+my $json	= JSON->new->utf8->canonical();
+
+my (
+	%flags,
+	@collection_ids,
+	$quiet,
+	%quirk_data
+);
+
+GetOptions(\%flags,
+	'get',
+	'add=s',
+	'replace=s',
+	'delete',
+	'i|id=i@'	=> \@collection_ids,
+	'p|pretty'	=> sub {
+		$json = $json->space_after->indent()
+	},
+	'q|quiet'	=> sub {
+		$logger->level($RISC::Collect::Logger::LOG_LEVEL{'ERROR'});
+		$quiet = 1;
+	},
+	'v|verbose'	=> sub {
+		$logger->level($RISC::Collect::Logger::LOG_LEVEL{'DEBUG'});
+	},
+	'h|help'	=> sub { pod2usage(EXIT_SUCCESS) }
+);
+
+## ensure that exactly one of the operation directive was given
+my $directive_count;
+map { $directive_count++ if ($flags{$_}) } qw( get add replace delete );
+unless ($directive_count == 1) {
+	printf(STDERR "** exactly one of '--get', '--add', '--replace', '--delete' required\n");
+	pod2usage(EXIT_FAILURE);
+}
+
+unless (scalar @collection_ids) {
+	printf(STDERR "** at least one '--id' required\n");
+	pod2usage(EXIT_FAILURE);
+}
+
+my $quirks = RISC::Collect::Quirks->new();
+if (my $error = $quirks->err()) {
+	printf(STDERR "** error loading RISC::Collect::Quirks: %s\n", $error);
+	exit(EXIT_FAILURE);
+}
+
+if ($flags{'get'}) {
+	map { $quirk_data{$_} = $quirks->get($_) } @collection_ids;
+	printf("%s\n", $json->encode({ quirks => \%quirk_data }));
+	exit(EXIT_SUCCESS);
+}
+
+if ($flags{'delete'}) {
+	map { $quirks->delete($_) } @collection_ids;
+	exit(EXIT_SUCCESS);
+}
+
+if ($flags{'add'}) {
+	foreach my $id (@collection_ids) {
+		my $current_data = $quirks->get($id);
+
+		if (my $error = $quirks->err()) {
+			printf(STDERR "** failed to get current quirks: %s\n", $error);
+			exit(EXIT_FAILURE);
+		}
+
+		$quirk_data{$id} = {
+			($current_data) ? %{ $current_data } : ( ),
+			%{ $json->decode($flags{'add'}) }
+		};
+	}
+} elsif ($flags{'replace'}) {
+	foreach my $id (@collection_ids) {
+		eval {
+			$quirk_data{$id} = $json->decode($flags{'replace'});
+		}; if ($@) {
+			printf(STDERR "** failed to decode input data: %s\n", $@);
+			exit(EXIT_FAILURE);
+		}
+	}
+}
+
+foreach my $id (@collection_ids) {
+	$quirks->post($id, $quirk_data{$id});
+	$quirk_data{$id} = $quirks->get($id);
+}
+
+printf("%s\n", $json->encode({ quirks => \%quirk_data }));
+exit(EXIT_SUCCESS);
+
+__END__
+
+=head1 NAME
+
+C<quirk> -- interact with collection source quirks
+
+=head1 SYNOPSIS
+
+	quirk --id ID[, --id ID, ...] --get
+	quirk --id ID[, --id ID, ...] --add JSON
+	quirk --id ID[, --id ID, ...] --replace JSON
+	quirk --id ID[, --id ID, ...] --delete
+
+	quirk --help
+	perldoc quirk
+
+=head1 DESCRIPTION
+
+C<quirk> provides a command-line interface to interact with C<quirks>, which is
+a key-value store for idiosyncrasies and other state particular to a collection
+source. See C<RISC::Collect::Quirks> for more details.
+
+At least one collection source must be specified by ID using C<--id>. Multiple
+collection sources may be specified, in which case the operation is applied to
+all of them identically.
+
+At least one of the operation flags, C<--get>, C<--add>, C<--replace>,
+C<--delete> must be specified.
+
+=head1 OPTIONS
+
+=head3 -i, --id ID
+
+Specifies the C<collection_id> of the collection source to operate on. May be
+specified multiple times to apply the operation to multiple collection sources.
+
+=head3 --get
+
+Fetches the current C<quirks> data for the collection sources and prints it to
+standard output as JSON.
+
+=head3 --delete
+
+Irrevocably deletes the C<quirks> data for the collection sources. Use with
+caution.
+
+=head3 --add JSON
+
+Merges the C<quirks> data specified in the JSON-encoded argument into the
+current C<quirks> data for the collection sources. If the given keys are
+already defined, the new value will overwrite the old value; if the keys are
+not already defined they are added. If there is no C<quirks> data for the
+collection source, it is created with the contents of the argument.
+
+For example, to add the C<foo> key with the value C<bar> to the collection
+source at ID C<1>:
+
+	quirk --id 1 --add '{"foo":"bar"}
+
+Prints the new C<quirks> data for the collection sources to standard output as
+JSON.
+
+=head3 --replace JSON
+
+Similar in behavior to C<--add>, except that any existing C<quirks> data is
+not merged, and the new data will fully replace the old data.
+
+For example, to replace any existing C<quirks> data for the collection source
+with ID C<1> with the key C<foo> and the value C<bar>:
+
+	quirk --id 1 --replace '{"foo":"bar"}'
+
+Prints the new C<quirks> data for the collection sources to standard output as
+JSON.
+
+=head3 -p, --pretty
+
+Pretty-encode the JSON output.
+
+=head3 -h, --help
+
+Print this help and exit.
+
+=head1 SEE ALSO
+
+=over
+
+=item C<RISC::Collect::Quirks>
+
+=back
+
+=cut

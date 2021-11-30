@@ -1,0 +1,161 @@
+{
+  "perf_processes": {
+    "gensrv": {
+      "core": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/gensrvssh-perf-admin.pl",
+        "arguments": [ ],
+        "interval": 5,
+        "children": [ "/home/risc/gensrvssh-perf.pl" ]
+      },
+      "snmp_core": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/gensrvsnmp-perf-admin.pl",
+        "arguments": [ ],
+        "interval": 5,
+        "children": [ "/home/risc/genericserverperf.pl" ]
+      },
+      "serviceconfig": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/service-config-admin.pl --type gensrvssh",
+        "arguments": [ ],
+        "interval": 1440,
+        "children": [ "/home/risc/gensrvssh-perf-serviceconfig.pl" ]
+      }
+    },
+    "windows": {
+      "core": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/winfiles/winperf.pl",
+        "arguments":[],
+        "interval": 5,
+        "children": [
+          "/home/risc/winfiles/winperf-detail2.pl"
+        ]
+      },
+      "aux": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/winfiles/winperf-aux-admin.pl",
+        "arguments": [ ],
+        "interval": 15,
+        "children": [ "/home/risc/winfiles/winperf-aux.pl" ],
+        "disabled": 1
+      },
+      "workstation": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/winfiles/winworkperf.pl",
+        "arguments": [],
+        "interval": 30,
+        "children": [ "/home/risc/winfiles/winworkperf-detail.pl" ]
+      },
+      "event": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/winfiles/win-event.pl",
+        "arguments": [ ],
+        "interval": 0,
+        "children": [ ],
+        "disabled": 1
+      },
+      "dns": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/winfiles/winperf-dns-admin.pl",
+        "arguments": [ ],
+        "interval": 60,
+        "children": [ "/home/risc/winfiles/winperf-dns.pl" ]
+      },
+      "serviceconfig": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/service-config-admin.pl --type windows",
+        "arguments": [ ],
+        "interval": 1440,
+        "children": [ "/home/risc/winfiles/winperf-serviceconfig.pl" ]
+      }
+    },
+    "network": {
+      "32bit": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/risc5MinPerf.pl",
+        "arguments": [ "instant" ],
+        "interval": 5,
+        "children": [ "/home/risc/traffic2.pl" ]
+      },
+      "64bit": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/network_perf_admin.pl",
+        "arguments": [ ],
+        "interval": 5,
+        "children": [ "/home/risc/traffic2.pl" ]
+      }
+    },
+    "vmware": {
+      "core": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/vmware_admin_batch_perf.pl",
+        "arguments": [ ],
+        "interval": 60,
+        "children": [
+          "/home/risc/vmware_perf_batch.pl"
+        ]
+      }
+    },
+    "database": {
+      "core": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/dbuse_supervisor.pl",
+        "arguments": [ ],
+        "interval": 5,
+        "children": [ "/home/risc/dbprobe.pl" ]
+      },
+      "table": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/dbtable_supervisor.pl",
+        "arguments": [ ],
+        "interval": 1440,
+        "children": [ "/home/risc/dbtables.pl" ]
+      }
+    },
+    "installedsoftware": {
+      "all": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/installed-software.pl",
+        "arguments": [ ],
+        "interval": 1440,
+        "children": [
+          "winperf-installed-software-parent",
+          "winperf-installed-software-worker",
+          "gensrvssh-installed-software-parent",
+          "gensrvssh-installed-software-worker"
+        ]
+      }
+    },
+    "trafficsim": {
+      "timeslot": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/platform_sla/platform_sla_timeslot.pl",
+        "arguments": [ ],
+        "interval": 5,
+        "children": [ ],
+        "disabled": 1
+      },
+      "watchdog": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/platform_sla/platform_sla_watchdog.pl",
+        "arguments": [ ],
+        "interval": 5,
+        "children": [ ],
+        "disabled": 1
+      }
+    },
+    "callmanager": {
+      "core": {
+        "interpreter": "perl",
+        "entrypoint": "/home/risc/ccm/RISCCCM.pl",
+        "arguments": [ ],
+        "interval": 10,
+        "children": [ ]
+      }
+    }
+  },
+  "legacy_perf_processes": {
+  }
+}

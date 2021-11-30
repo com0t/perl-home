@@ -1,0 +1,241 @@
+#!/usr/bin/env perl
+#
+##
+use strict;
+use Data::Dumper
+
+$Data::Dumper::Sortkeys	= 1;
+$Data::Dumper::Terse	= 1;
+
+use Pod::Usage;
+use Getopt::Long qw(
+	:config
+	require_order
+	bundling
+	no_ignore_case
+);
+
+use JSON;
+use RISC::Collect::Logger;
+use RISC::Event qw(
+	post_event
+	post_event_result
+	list_cache
+	post_from_cache
+	check_event_type
+	list_event_types
+);
+
+use constant {
+	STATUS_SUCCESS	=> 'success',
+	EXIT_SUCCESS	=> 0,
+	STATUS_FAIL	=> 'fail',
+	EXIT_FAIL	=> 1
+};
+
+my $logger = RISC::Collect::Logger->new('event-resolver');
+
+my $subcommand = shift;
+
+## no subcommand
+if (not defined($subcommand)) {
+	pod2usage(EXIT_FAIL);
+}
+
+## subcommand looks like an option, unless it's help
+if ($subcommand =~ /^-/) {
+	pod2usage(EXIT_SUCCESS) if ($subcommand =~ /-h|--help/);
+	pod2usage(EXIT_FAIL);
+}
+
+my %options;
+GetOptions(\%options,
+	'type=s',
+	'no-cache',
+	'list',
+	'clean',
+	'fail-result',
+	'pretty',
+	'debug',
+	'quiet',
+	'h|help'	=> sub { pod2usage(EXIT_SUCCESS) }
+);
+
+if ($options{'quiet'}) {
+	$logger->level($RISC::Collect::Logger::LOG_LEVEL{'ERROR'})
+} elsif ($options{'debug'}) {
+	$logger->level($RISC::Collect::Logger::LOG_LEVEL{'DEBUG'})
+}
+
+my $json = JSON->new->utf8->canonical();
+$json = $json->space_after->indent()
+	if ($options{'pretty'});
+
+if ($subcommand eq 'send') {
+	failure('missing --type')
+		unless ($options{'type'});
+	failure('bad event type')
+		unless (check_event_type($options{'type'}));
+	my $event = RISC::Event::Factory::make_event(
+		$options{'type'},
+		@ARGV
+	);
+	failure('failed to create event') unless ($event);
+	my $cache = 1 unless ($options{'no-cache'});
+	if (post_event($options{'type'}, $event, $cache)) {
+		printf("%s\n", $json->encode({
+			status	=> STATUS_SUCCESS
+		})) unless ($options{'quiet'});
+		exit(EXIT_SUCCESS);
+	} else {
+		my $result = post_event_result();
+		printf("%s\n", $json->encode({
+			status	=> STATUS_FAIL,
+			message	=> $result->{'detail'}
+		})) unless ($options{'quiet'});
+		exit(EXIT_FAIL);
+	}
+} elsif ($subcommand eq 'cache') {
+	my $cache_list = list_cache();
+	$cache_list = [ ] unless ($cache_list);
+
+	## these options are mutually exclusive, and exit when complete
+	if ($options{'list'}) {
+		printf("%s\n", $json->encode({
+			'cached_events' => $cache_list
+		})); ## ignore quiet mode
+		exit(EXIT_SUCCESS);
+	} elsif ($options{'clean'}) {
+		my @removed;
+		foreach my $event (@{ $cache_list }) {
+			unlink($event);
+			push(@removed, $event);
+		}
+		printf("%s\n", $json->encode({
+			'removed_from_cache' => \@removed
+		})) unless ($options{'quiet'});
+		exit(EXIT_SUCCESS);
+	}
+
+	my %result;
+	foreach my $event (@{ $cache_list }) {
+		if (post_from_cache($event)) {
+			push(@{ $result{'success'} }, $event);
+		} else {
+			push(@{ $result{'fail'} }, $event);
+			push(@{ $result{'fail_result'} }, post_event_result())
+				if ($options{'fail-result'});
+		}
+	}
+
+	printf("%s\n", $json->encode({
+		result	=> \%result
+	})) unless ($options{'quiet'});
+
+	exit(EXIT_SUCCESS);
+} else {
+	failure('bad sub-command');
+}
+
+exit(EXIT_SUCCESS);
+
+sub failure {
+	my ($error) = @_;
+	printf("%s\n", $json->encode({
+		'status'	=> STATUS_FAIL,
+		'message'	=> $error
+	})) unless ($options{'quiet'});
+	exit(EXIT_FAIL);
+}
+
+__END__
+
+=head1 NAME
+
+C<event>
+
+=head1 SYNOPSIS
+
+	event SUBCOMMAND [--fail-result] [--pretty] [--quiet|--debug]
+	event send --type EVENT_TYPE [--no-cache] POSITIONAL_ARGUMENTS
+	event cache
+	event cache --list
+	event cache --clean
+	event --help
+
+=head1 DESCRIPTION
+
+C<event> operates with Events, using the Orchestration API C<postEvent()>
+method. Events are conditions or occurrences that warrant notification to the
+operations or development teams for inspection, customer notification, or
+support action.
+
+Events are serviced via the C<RISC::Event> framework, which builds the Event
+structure and posts it to the Orchestration API. If the delivery of an Event
+fails, and the event type is cacheable, the Event payload is cached as a JSON
+file. Cached Events can be reattempted for delivery at a later date.
+
+=head2 SUBCOMMANDS
+
+The first argument to C<event> is a sub-command keyword.
+
+=head3 send
+
+Delivers a new Event.
+
+=head3 cache
+
+Operates on cached Events. The default behavior of the C<cache> sub-command is
+to re-attempt delivery of all cached events, producing a report of which Events
+were succesfully and unsuccessfully delivered. The sub-command can also list
+the cached Events and clear the cache.
+
+=head1 OPTIONS
+
+=head2 -t, --type
+
+Within the C<send> sub-command, defines the Event type by name. Required.
+
+=head2, --no-cache
+
+Within the C<send> sub-command, explicity avoid caching a failed delivery.
+
+=head2 -l, --list
+
+Within the C<cache> sub-command, list the cached Events and exit.
+
+=head2 -c, --clean
+
+Within the C<cache> sub-command, delete all cached Events and exit.
+
+=head2 -f, --fail-result
+
+Include the full API response structure in the results for failed deliveries.
+
+=head2 -P, --pretty
+
+Pretty-format JSON output
+
+=head2 -q, --quiet
+
+Set the logger to ERROR level and avoid printing results.
+
+=head2 -d, --debug
+
+Set the logger to DEBUG level.
+
+=head2 -h, --help
+
+Display this manual and exit.
+
+=head1 SEE ALSO
+
+=over
+
+=item C<RISC::Event>
+
+=item C<postEvent Orchestration API method>
+
+=back
+
+=cut

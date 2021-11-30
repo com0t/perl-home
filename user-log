@@ -1,0 +1,137 @@
+#!/usr/bin/env perl
+#
+##
+use strict;
+use Data::Dumper
+
+$Data::Dumper::Sortkeys	= 1;
+$Data::Dumper::Terse	= 1;
+
+use Pod::Usage;
+use Getopt::Long qw(
+	:config
+	require_order
+	bundling
+	no_ignore_case
+);
+
+use RISC::Collect::Constants qw( :status );
+use RISC::Collect::Logger;
+use RISC::Collect::UserLog;
+
+my %operations = (
+	post	=> \&post_log
+);
+
+my $operation = shift;
+
+my (
+	$context,
+	$level,
+	$category,
+	$collection_id,
+	$source
+);
+
+GetOptions(
+	'context|c=s'	=> \$context,
+	'level|l=s'	=> \$level,
+	'category|c=s'	=> \$category,
+	'id|i=i'	=> \$collection_id,
+	'source|s=s'	=> \$source,
+	'help|h'	=> sub { pod2usage(EXIT_SUCCESS) }
+);
+
+my $message = shift;
+
+unless (($operation) and ($operations{$operation})) {
+	pod2usage(EXIT_FAILURE);
+}
+
+my $ul = RISC::Collect::UserLog->new->context($context);
+$ul = $ul->collection_id($collection_id) if (defined($collection_id));
+
+$operations{$operation}->();
+
+exit(EXIT_SUCCESS);
+
+sub post_log {
+	unless (($context) and ($level) and ($message)) {
+		pod2usage(EXIT_FAILURE);
+	}
+
+	$ul->$level($message, $category, $source);
+}
+
+__END__
+
+=head1 NAME
+
+C<user-log>
+
+=head1 SYNOPSIS
+
+	user-log <operation> [operation-args]
+
+	user-log post --context CTX --level LVL [--category CTG] [--id ID] [--source SOURCE] <message>
+
+	user-log --help
+	perldoc user-log
+
+=head1 DESCRIPTION
+
+C<user-log> provides a command-line interface to the collection user log, as
+a front-end to the C<RISC::Collect::UserLog> module.
+
+The first argument must be a supported operation keyword. Currently, only the
+C<post> keyword is recognized.
+
+The C<post> operation adds a new entry to the collection user log. It requires
+the C<context> to be set using C<--context> and the C<level> to be set using
+C<--level>.  These flags take as arguments the name of a C<context> or C<level>
+as a string. The C<--id> flag can optionally be used to set the
+C<collection_id>, and the C<--source> flag can be used to set the C<source>.
+Setting the C<source> may be important here, as otherwise the automatic
+C<source> detection will report this utility as the C<source> every time.
+
+=head1 OPTIONS
+
+=head3 --context, -c CTX
+
+Required for the C<post> operation. Takes the name of a C<context> as an
+argument.
+
+=head3 --level, -l LVL
+
+Required for the C<post> operation. Takes the name of a C<level> as an
+argument.
+
+=head3 --category, -c CTG
+
+Optional for the C<post> operation. Takes the name of a C<category> as an
+argument. If not supplied, the default C<category> of C<unclassified> will be
+used.
+
+=head3 --id, -i ID
+
+Optional for the C<post> operation. Takes a C<collection_id> as an argument.
+
+=head3 --source, -s SOURCE
+
+Optional for the C<post> operation. Takes an arbitrary string as an argument.
+
+=head3 --help, -h
+
+Prints this help. C<perldoc> can also be used for more extensive documentation.
+
+=head1 SEE ALSO
+
+=over
+
+=item C<RISC::Collect::UserLog>
+
+=item C<RISC::Collect::Constants>
+
+=back
+
+=cut

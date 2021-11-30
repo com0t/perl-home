@@ -1,0 +1,23 @@
+{
+    "winOutputFields": {
+        "username": "PassProps.UserName",
+        "passphrase": "Password",
+        "domain": "PassProps.LogonDomain"
+    },
+    "gensrvsshOutputFields": {
+        "username": "PassProps.UserName",
+        "passphrase": "Password"
+    },
+    "msSqlOutputFields": {
+        "username": "PassProps.UserName",
+        "passphrase": "Password",
+        "port": "PassProps.Port"
+    },
+    "oracleOutputFields": {
+        "username": "PassProps.UserName",
+        "passphrase": "Password",
+        "securityname": "PassProps.Database",
+        "port": "PassProps.Port"
+    },
+    "AppID": "rn150"
+}
